@@ -1,0 +1,427 @@
+// $Id: shape.hoc,v 1.117 2005/03/07 23:58:21 billl Exp $
+
+// load_file("shape.hoc")
+load_file("nqs.hoc")
+// trunc(nq,nq2)
+
+objref pls,sh,sl,rvpl,rvp,sec,secl,srl,dl[1],nq,nq2
+rvpl = new List() // list of RangeVarPlot's
+srl = new List()
+d=0
+//* trunqs(nq,nq2) 
+// create 2 NQS waiting to be filled in
+proc trunqs () {
+  forsec "soma" distance()
+  $o1 = new NQS("NAME","PARENT","NCHILD","DIST0","DIST1","NSEG","ORDER","CODE")
+  $o1.strdec("NAME","PARENT")
+  // $o2 = new NQS("NAME","DIST","X","Y","Z","DIAM","DIAM3D","SEG#")
+  $o2 = new NQS("NAME","DIST","AREA","SEG#")
+  $o2.strdec($o1,"NAME")
+}
+// ID subsumes ID,parent,child
+
+proc newshp () {
+  objref sh
+  forsec "soma" distance()
+  sh = new Shape()
+  sh.color_all(1)
+  sh.menu_tool("test", "p_p")
+  sh.exec_menu("test")
+}
+
+iterator ttr () { local nm,xi,flag
+  nm=$o1.fi("NAME")  xi=$o1.fi("SEG#") 
+  XO=new String2("","")
+  sprint(temp_string_,"access %s",secname())
+  if (numarg()>1) flag=0 else flag=1  // flag -- include non-nseg x
+  for i1=0,$o1.size(1)-1 {
+    $o1.get(nm,i1,XO.s)
+    if (strcmp(XO.s,XO.t)!=0) { 
+      XO.t=XO.s
+      sprint(tstr,"access %s",XO.s) execute(tstr)
+    }
+    x=$o1.v[xi].x[i1]
+    if (flag || (x!=0 && x!=1)) { iterator_statement }
+  }
+  execute(temp_string_)
+  XO=nil
+}
+
+//* trunc(TRESEC,TRE[,SECLIST]) build tree databases
+proc trunc () { local flag,ii,nch,n
+  trunqs($o1,$o2)
+  // keep string lists parallel
+  $o1.fcds.append(new String("NONE")) $o2.fcds.append(new String("NONE"))
+  forall if (distance(0)<1e20) {
+    sec = new SectionRef() 
+    if (sec.has_parent) { sec.parent tstr=secname() } else tstr="NONE"
+    sec.sec { 
+      for (x,0) {
+                         // NAME  DIST  X  Y  Z  DIAM  DIAM3D  SEG#
+        // $o2.append(secname(),distance(x),x3d(int(x*(n3d()-1))),y3d(int(x*(n3d()-1))),\
+        //           z3d(int(x*(n3d()-1))),diam(x),diam3d(int(x*(n3d()-1))),x)
+        // NAME  DIST  AREA  SEG#
+        $o2.append(secname(),distance(x),area(x),x)
+      }
+      //          "NAME","PARENT","NCHILD","DIST0",    "DIST1",    "NSEG",  "ORDER", "CODE"
+      $o1.append(secname(),tstr,sec.nchild,distance(0),distance(1),nseg, 0, 0)
+    }
+  } else printf("\"%s\" not connected ... skipping\n",secname())
+  calcord($o1)
+}
+
+// calcord() -- calculate orders for all sections
+proc calcord () { local vn,n,a,b
+  vn=$o1.fi("NAME") a=b=allocvecs(2) b+=1
+  $o1.fill("ORDER",-1)
+  $o1.select(-1,"PARENT",SEQ,"NONE") $o1.fillin("ORDER",0)
+  n=0
+  while ($o1.select(-1,"ORDER",n)>0) {
+    vrsz($o1.ind,mso[a],mso[b]) mso[b].indgen(1)
+    mso[a].copy($o1.v[vn],$o1.ind,mso[b])
+    for vtr(&x,mso[a]) {
+      // $o1.select("PARENT",SEQ,$o1.fcds.object(x).s)
+      $o1.select(-1,"PARENT",EQU,x) // use the number statt string
+      $o1.fillin("ORDER",n+1)
+    }
+    n+=1
+  }
+  dealloc(a)
+}
+
+// trl(XO,TRE_list,regexp)
+iterator trl () { local ii,flag
+  flag=0
+  for ii=0,$o2.count-1 {
+    $o1=$o2.object(ii) 
+    if (strm($o1.name,$s3)) $o1.sec.sec {
+      flag+=1
+      iterator_statement
+    }
+  }
+  if (!flag) print $s3," not found (trl)"
+  if (flag>1) printf("%s matched %d secs (trl)\n",$s3,flag)
+}
+
+//** trm(XO,TRE_list,str) same as trl() except string-match is exact
+iterator trm () { local ii,flag
+  flag=0
+  for ii=0,$o2.count-1 {
+    $o1=$o2.object(ii) 
+    if (strcmp($o1.name,$s3)==0) $o1.sec.sec {
+      flag+=1
+      iterator_statement
+    }
+  }
+  if (!flag) print $s3," not found (trm)"
+  if (flag>1) printf("%s matched %d secs (trm)\n",$s3,flag)
+}
+
+//* trak(mainLIST,LOC,outputLIST) -- track() rewritten to use TRE statt seclist
+// give location as a regular expression for strm()
+// puts the indices for the track into vec
+proc trak () { 
+  $o3.remove_all
+  for trl(XO,$o1,$s2) {
+    $o3.append(XO)
+    while (XO.par>-1) { // till reach soma
+      XO=$o1.object(XO.par)
+      $o3.append(XO)
+    }
+  }
+}
+
+//* bktrak(mainLIST,LOC,dist) -- back track for dist distance
+// func returns index with associated TRE in XO
+// eg bktrak(dl[ee],"\\[21",100) returns 3 then XO.xv.x[3] is closest
+func bktrak () { local dist,loc,flag,ret
+  dist=$3 flag=1
+  for trl(XO,$o1,$s2) {
+    loc = XO.dv.max-dist // location being sought
+    if (loc<0) { print "bktrak ERR1: too far" flag=0 ret=-1}
+    while (flag) { // till reach soma
+      if (loc>=XO.dv.min && loc<=XO.dv.max) {
+        flag=0 ret=closest(XO.dv,loc) YO=XO
+      }
+      if (XO.par==-1) {flag=0 ret=-1}
+      XO=$o1.object(XO.par)
+    }
+  }
+  XO=YO
+  return ret
+}
+
+//* track from recording site down to soma
+// start at location with sec=new SectionRef()
+proc track () { 
+  $o1.remove($o1)
+  sec = new SectionRef()
+  sec.sec $o1.append()
+  while (sec.has_parent) { 
+    sec.parent sec = new SectionRef()
+    if (sec.has_parent) sec.sec $o1.append()
+  }
+}
+
+//* prune(SECLIST,NUM,NEWSECLIST) grab NUM separated sections from SECLIST and add to NEWSECLIST
+proc prune () { local sum,ii,jj,n,skp,keep
+  n=$2 sum=0
+  forsec $o1 sum+=1
+  skp=int(sum/(n+1))
+  printf("Keeping every %d of %d secs in %s\n",skp,sum,$o1)
+  ii=0 jj=0 keep=skp
+  forsec $o1 {
+    if (ii==keep && jj<n) { 
+      $o3.append()
+      print "Keeping ",secname()
+      keep+=skp
+      jj+=1 // counter for those kept
+    }
+    ii+=1  // counter through SECLIST
+  }
+}
+
+// for dsr(DISTLIST)
+// eg for dsr(list) gmax_kdr(dix)=dis/max * val
+// dis will be distance and dix will be location on the sec
+//   distance, location, sec count,  seg count
+double dis[1],  dix[1],   secn[1],     segn[1]
+iterator dsr () { 
+  max=-1
+  for secn=0,$o1.count-1 if ($o1.object(secn).dv.max>max) max=$o1.object(secn).dv.max
+  for secn=0,$o1.count-1 for segn=0,$o1.object(secn).dv.size-1 {
+    dis=$o1.object(secn).dv.x[segn]
+    dix=$o1.object(secn).xv.x[segn]
+    $o1.object(secn).sec.sec { iterator_statement }
+  }
+}
+
+// find the point in the sectionlist that's furthest -- must set distance()
+func maxdist () { local max
+  max=-1e10
+  forsec $o1 if (distance(1)>max) max=distance(1) // find the end of the list
+  return max
+}
+
+// dcls(SECLIST,TARG) 
+// eg for dcls(seclist,0.72) printf("%s(%.2f) @ %.2f\n",secname(),i1,distance(i1))
+iterator dcls () { local targ,min,max,n,dist,sc
+  tmpobj=$o1
+  if (numarg()==3) { max=$3 } else {
+    max=-1e10
+    forsec tmpobj if (distance(1)>max) max=distance(1) // find the end of the list
+  }
+  targ=$2*max  min=1e10 x=0 n=0 // targ is target distance
+  forsec tmpobj { n+=1    // loop to find closest point
+    for (x) {          // sc=n is sect count, i1=x is seg loc
+      dist=distance(x)
+      if (abs(dist-targ)<min) { min=abs(dist-targ) i1=x sc=n }
+    }}
+  n=0
+  forsec tmpobj { n+=1    // count to find the same sec
+    if (n==sc) {
+      printf("%s(%.2f) @ %.2f ~ %.2f\n",secname(),i1,distance(i1),targ)
+      iterator_statement  // do something here
+    }
+  }
+}
+
+//** markloc()
+proc markloc () { local colr
+  if (isobj($o1,"List")) {
+    if (numarg()==4) colr=$4 else colr=2
+    $o1.object($2).sec.sec tmpobj=new PointProcessMark($o1.object($2).xv.x[$3])
+  } else {
+    if (numarg()==3) colr=$3 else colr=2
+    $o1.sec.sec tmpobj=new PointProcessMark($o1.xv.x[$2])
+  }
+  sh.point_mark(tmpobj,colr)
+  tmplist.append(tmpobj) 
+  tmpobj=nil
+}  
+
+//* p_p()
+proc p_p () { local d, a, l
+  if ($1 == 2) {
+    sh.color_all(1)
+    sh.point_mark_remove()
+    d = sh.nearest($2,$3) 
+    a = sh.push_selected()
+    if (a >= 0) {
+      sh.select()
+      l=a*(n3d()-1)
+      sh.erase
+      XO = new PointProcessMark(0)
+      sh.point_mark(XO,2)
+      YO = new PointProcessMark(1)
+      sh.point_mark(YO,3)
+      printf("%s(%g): %d,%g,%g,%g,%d\n", secname(), a, l, x3d(l), y3d(l), z3d(l),distance(a))
+      // printf("%s(%g): %g,%g,%g - %g,%g,%g\n", secname(), a, x3d(0), y3d(0), z3d(0), x3d(n3d()-1), y3d(n3d()-1), z3d(n3d()-1))                               // x,y,z coordinates
+      printf("%s L=%g diam=%g-%g area=%g nseg=%d\n",secname(),L,diam(0),diam(1),area(0.5),nseg)              // L and diam
+      // printf("%s: %g -> %g\n", secname(), z3d(0), z3d(n3d()-1)) // z coordinates
+      // printf("%s d(0)=%g d(1)=%g nseg=%d\n",secname(),distance(0),distance(1),nseg)// distance
+      pop_section()
+    }
+  }
+}
+
+//* proc psec -- modified psection()
+proc psec () { local d,l
+  if (numarg()==1) { sprint(tstr,"%s sec = new SectionRef()",$s1)
+    execute(tstr) } else sec = new SectionRef()
+  // if (sec.has_parent()) sec.parent sprint(tstr,"%s",secname())
+  sec.sec printf("%s->%s:  %g x %g\n",tstr,secname(),L,diam)
+  // sec.sec printf("%s->%s:  %.2f\n",tstr,secname(),diam)
+  // sec.sec printf("%g %g %g\n",x3d(0),y3d(0),z3d(0))
+  // sec.sec printf("%s: %g,%g,%g -> %g,%g,%g\n", secname(), x3d(0), y3d(0), z3d(0), x3d(n3d()-1), y3d(n3d()-1), z3d(n3d()-1))
+  vec.resize(0)
+  for ii=0,sec.nchild-1 sec.child[ii] { vec.append(diam(0)) print secname() }
+  vec.sort
+  sec.sec printf("%s has %d branches (%.1f): ",secname(),sec.nchild,vec.sum)
+  vlk(vec)
+  sec=nil
+}
+
+//* move cells around, crm(), translate(), zrotate()
+// $o1 is sectionlist for this neuron, $2 is theta in degrees
+proc crm () { local theta,ii
+  if (numarg()==0) {print "crm(SECLIST,ROT_DEG)" return }
+  tmpobj=$o1
+  theta = $2
+  ind.resize(0)  vec.resize(0)
+  forsec tmpobj for ii=0,n3d()-1 { ind.append(x3d(ii)) vec.append(y3d(ii)) } 
+  forsec tmpobj translate(-ind.mean,-vec.mean)
+  forsec tmpobj zrotate(theta)
+}
+
+//** rotate and translate
+// zrotate(seclist,theta) OR forsec seclist zrotate(theta)
+proc zrotate () { local theta,ii
+  if (numarg()==2) { // include the list as 1st arg
+    theta= -$2/360*2*PI  // don't know why it is negative here
+    forsec $o1 for ii=0,n3d()-1 pt3dchange(ii,x3d(ii)*cos(theta) -  y3d(ii)*sin(theta),\
+                                           y3d(ii)*cos(theta) +  x3d(ii)*sin(theta),\
+                                           z3d(ii), diam3d(ii))
+  } else {
+    theta= -$1/360*2*PI  // don't know why it is negative here
+    for ii=0,n3d()-1 pt3dchange(ii,x3d(ii)*cos(theta) -  y3d(ii)*sin(theta),\
+                                y3d(ii)*cos(theta) +  x3d(ii)*sin(theta),\
+                                z3d(ii), diam3d(ii))
+  }
+}
+
+//** translate in x,y plane
+// translate(seclist,x,y) OR forsec seclist translate(x,y)
+proc translate () { local x,y,ii
+  if (numarg()==2) {
+    x=$1 y=$2  
+    for ii=0,n3d()-1 pt3dchange(ii,x3d(ii)+x,y3d(ii)+y,z3d(ii), diam3d(ii))
+  } else { 
+    x=$2 y=$3
+    forsec $o1 for ii=0,n3d()-1 pt3dchange(ii,x3d(ii)+x,y3d(ii)+y,z3d(ii), diam3d(ii))
+  }
+}
+
+//* graphics -- space plot to graph v from one location to another
+
+//* newspaceplot("SECNAME1","SECNAME2",seclist) -- 3rd arg optional for back compatability
+proc newspaceplot () {
+  rvp = new RangeVarPlot("v")
+  rvpl.append(rvp)
+  sprint(tstr,"%s rvp.begin(1)",$s1) execute(tstr)
+  sprint(tstr,"%s rvp.end(1)",$s2) execute(tstr)
+  rvp.origin(0)
+  if (numarg()==3) { 
+    $o3=new SectionList()
+    rvp.list($o3)
+    rvp=nil
+  }
+}
+
+//** grspaceplot(g,rvp)
+proc grspaceplot () {
+  $o1.addobject($o2, 2, 1, 0.8, 0.9)
+  $o1.size(-600,600,-80,40)
+  $o1.view(-600, -80, 1200, 120, 150, 40, 450, 300)
+}
+
+//** drawspace("SECNAME1","SECNAME2",TRE_LIST) will trak from both directions to draw rvp locs on shape
+proc drawspace () { local colr
+  if (numarg()==4) colr=$4 else colr=2
+  for trm(XO,$o3,$s1) while (XO.par>-1) {
+      XO.sec.sec sh.color(colr)
+      XO=$o3.object(XO.par)
+  }
+  for trm(XO,$o3,$s2) while (XO.par>-1) {
+      XO.sec.sec sh.color(colr)
+      XO=$o3.object(XO.par)
+  }
+  sh.flush()
+}
+
+//* grdm(cel# or obj,graph,label) graph diameters
+proc grdm () { local a,b,cel
+  cel=$1 
+  g=$o2
+  a=b=allocvecs(2) b+=1
+  g.erase
+  for ltr(XO,dl[cel],&y) if (XO.chl.size==0) {
+    mso[a].resize(0) mso[b].resize(0)
+    YO=dl[cel].object(XO.par) // parent
+    YO.sec.sec {
+     for vtr(&x,YO.xv) mso[a].append(diam(x))
+     mso[b].append(YO.dv)
+    }
+    XO.sec.sec {
+      for vtr(&x,XO.xv) mso[a].append(diam(x))
+      mso[b].append(XO.dv)
+    }
+    if (XO.ypv.min<-10) mso[b].mul(-1) // show basal dends
+    mso[a].line(g,mso[b],y%9+1,2)
+  }
+  if (numarg()==3) g.label(0.8,0.8,$s3)
+  g.size(0,800,0.1,1)
+  dealloc(a)
+}
+
+//* inssec(child,plug)
+proc inssec () { local chl,par,plg,i
+  chl=newsref($s1) plg=newsref($s2) par=plg+1
+  srl.object(chl).parent srl.append(new SectionRef())   // parent         
+  srl.object(chl).sec disconnect()  // disconnect child
+  srl.object(par).sec connect srl.object(plg).sec(0), 1  // connect plug
+  srl.object(plg).sec connect srl.object(chl).sec(0), 1
+  // for (i=par;i>=chl;i-=1) srl.remove(i)
+  sec=nil
+}
+
+func newsref () {
+  sprint(temp_string_,"%s srl.append(sec=new SectionRef())",$s1)
+  execute(temp_string_)
+  return srl.count-1
+}
+
+
+//** remsec(plug[,delete_section]) 
+proc remsec () { local chl,par,plg,i
+  plg=newsref($s1) chl=plg+1 par=plg+2
+  i=srl.object(plg).nchild
+  if (i!=1) { printf("resec ERR plug has %d children\n",i) return }
+  srl.object(plg).child[0] srl.append(new SectionRef())   // child
+  srl.object(plg).parent   srl.append(new SectionRef())   // parent
+  srl.object(chl).sec disconnect()
+  srl.object(plg).sec disconnect()
+  srl.object(par).sec connect srl.object(chl).sec(0), 1
+  if (numarg()>1) srl.object(plg) delete_section()
+  // for (i=par;i>=plg;i-=1) srl.remove(i)
+}
+
+//** deparea("SEC")
+func deparea () { local a,sum
+  sum=0
+  if (! isobj(secl,"SectionList")) { secl=new SectionList() }
+  secl.remove(secl)
+  sprint(temp_string_,"%s {secl.subtree() secl.remove()}",$s1) execute(temp_string_)
+  forsec secl for (x,0) sum+=area(x)
+  return sum
+}

@@ -1,0 +1,302 @@
+// $Id: mechs.hoc,v 1.75 2004/10/26 07:39:48 billl Exp $
+
+// mechnams(0) gives the mechs and (1) gives the point processes
+// eg mechvars("hh") gives all the vars that go with one example of hh
+
+load_file("grvec.hoc")
+load_file("nqs.hoc")
+load_file("shape.hoc")
+load_file("hinton.hoc")
+
+objref mt[2],ms[2],pgl,parl
+mt = new MechanismType(0)    // membrane mechs
+mt[1] = new MechanismType(1) // point processes
+
+// if (strm(tstr,"^[gp].*bar_")||strm(tstr,"^[gp].*max_")||strm(tstr,"g.*_[Pp][Aa][Ss].*"))
+//** mechnqs(nqs) -- use nq2 from shape.hoc
+proc mechnqs () { local sz,n
+  if (numarg()<2) mparl() // puts list of params in parl
+  sz=$o1.m
+  $o1.resize(sz+parl.size(1))
+  for parl.qt(tstr2,"GBAR",temp_string_,"NNAME") {
+    printf("Looking at %s\n",tstr2)
+    if (sfunc.tail(tstr2,"g[^_]+_",tstr)==-1) sprint(tstr,"%s0",tstr2)
+    $o1.sets(i1+sz,tstr)
+  }
+  $o1.pad()
+  mechfillnqs($o1,sz)
+}
+
+//** save and read nq,nq2,parl
+proc svmechs () {
+  if (numarg()==3) {  $o2.sv($s1)  $o3.sv($s1,1)
+  } else {  nq.sv($s1)   nq2.sv($s1,1)  }
+  parl.sv($s1,1)
+}
+
+// rdmechs(FILENAME,OBJ1,OBJ2) { local ii
+proc rdmechs () { local ii
+  if (! isobj($o2,"NQS")) {$o2=new NQS() $o3=new NQS() parl=new NQS()}
+  $o2.rd($s1)
+  $o3.rd($s1,1)
+  $o3.strdec($o2)
+  parl.rd($s1,1)
+}
+
+// nrfp() neuron fingerprint
+// draw data from nq2 in a hinton plot
+// trunc(nq,nq2) mechnqs(nq2)
+proc nrfp () { local max,a
+  if (! isobj(ghint,"PlotShape")) plot2d(ghint,0,1) else if (ghint.view_count==0) {
+    ghint.view(0,100,0,100,100,50,500,500) }
+  if (numarg()==1) max=$1 else {  max=0
+    for ii=4,nq2.m-1 if (nq2.v[ii].max>max) max=nq2.v[ii].max }
+  a=allocvecs(1)
+  nq2.select()
+  nq2.sort("DIST")
+  crescale(ghint,0,1)
+  ghint.erase_all
+  for ii=4,nq2.m-1 {
+    mso[a].copy(nq2.out.v[ii])
+    mso[a].scale(2,70)  // min-max width
+    if (mso[a].max==0) { mso[a].fill(2) // all zeros
+    } else if (mso[a].max==mso[a].min) { mso[a].fill(20) // single value
+    } else if (mso[a].count(mso[a].min)+mso[a].count(mso[a].max)==mso[a].size) { // 2 values
+      if (mso[a].min==0) { mso[a].scale(2,50) // bottom is 0
+      } else { mso[a].scale(10,30) }
+    }
+    nq2.out.v[ii].div(max)
+    hgg(nq2.out.v[ii],nq2.out.v[1],(ii-3+0.5)*80,mso[a])
+  }
+  for ii=4,nq2.m-1 ghint.label((ii-3)*0.055,0.9+ii%2*0.03,nq2.s[ii].s)
+  ghint.size(0,ii*70,0,1.1*nq2.out.v[1].max)
+  ghint.exec_menu("Zoom in/out")
+  nq2.tog
+  dealloc(a)
+}
+
+// mechfillnqs(nq2,sz)
+proc mechfillnqs () { local sz,n,y
+  sz=$2   n=-1  
+  forall if (distance(0)<1e20) for (x,0) { 
+    // print $o1.fcds.object($o1.v[0].x[n]).s,secname(),$o1.v[3].x[n],x // check that all same
+    y=0 n+=1 // follow sequence for creating in trunc()
+    for parl.qt(tstr2,"GBAR",temp_string_,"SUFF") {
+      if (ismembrane(temp_string_)) {
+        sprint(tstr,"%s.v[%d].x[%d]=%s",$o1,sz+y,n,tstr2)
+        execute(tstr)
+      } else { $o1.v[sz+y].x[n]=0 }
+      y+=1
+    }
+  }
+}
+
+// cmnqs(nq) put cm and Ra on the nq list
+proc cmnqs () { local sz,n
+  sz=$o1.m n=-1
+  $o1.resize(sz+2)
+  $o1.sets(sz,"Ra")  $o1.sets(sz+1,"cm")
+  $o1.pad()
+  forall if (distance(0)<1e20) { n+=1
+    if (strcmp($o1.fcds.object($o1.v[0].x[n]).s,secname())!=0) {
+      printf("ERR: %s %s\n",$o1.fcds.object($o1.v[0].x[n]).s,secname()) return }
+    for scase("Ra","cm") {
+      sprint(tstr,"%s.v[%d].x[%d]=%s",$o1,sz+i1,n,temp_string_)
+      execute(tstr)
+    }
+  }
+}
+
+//** mparl() create parl: NQS with strcols for channel name, channel gbar, nickname
+proc mparl () { local ii,j,n,val,tval,flag
+  if (!isassigned(parl)) parl=new NQS("SUFF","GBAR","NNAME")
+  tmplist.remove_all parl.clear()
+  parl.strdec("SUFF","GBAR","NNAME")
+  for ii=0, mt[0].count()-1 {
+    mt[0].select(ii)	
+    mt[0].selected(tstr)
+    ms = new MechanismStandard(tstr, 1)
+    flag=0 forall if (ismembrane(tstr)) flag=1
+    if (flag) tmplist.append(new String(tstr))
+    mechclean(tmplist)
+  }
+  for ltr(YO,tmplist) {
+    ms = new MechanismStandard(YO.s, 1)
+    for j=0, ms.count()-1 {
+      ms.name(tstr, j)
+      if (strm(tstr,"^[gp].*bar_")||strm(tstr,"^[gp].*max_")||strm(tstr,"g.*_[Pp][Aa][Ss].*")){
+        parl.append(YO.s,tstr,"")
+      } else if (0) { // look for other inhomogeneous param
+        sprint(tstr2,"y=%s",tstr)
+        forall if (ismembrane(YO.s)) {
+          execute(tstr2) val=y 
+          break
+        }
+        flag=1 // need flag in order to break out of nested loop
+        forall if (flag) for (x,0) {
+          execute(tstr2)
+          if (val!=y) {
+            parl.append(new String2(tstr,YO.s)) 
+            flag=0
+            break 
+          }
+        }
+      }
+    }
+  }
+}
+      
+// If vartype = 1, 2, or 3, the storage is for PARAMETER, ASSIGNED, or STATE variables
+// If vartype = 0, the storage is for all three types.
+// If vartype = -1, the count and names (and array size) of the GLOBAL variables
+proc mechvars () { local i,j,val,min,max
+  if (numarg()==2) min=max=$2 else {min=-1 max=3}
+  for i=min,max {
+    ms = new MechanismStandard($s1, i)
+    print "\n", $s1, "  vartype=", i
+    for j=0, ms.count()-1 {
+      ms.name(tstr, j)
+      if (i!=-1) { 
+        val=ms.get(tstr) 
+        print j, tstr," = ", val
+      } else print j, tstr
+    }
+  }
+}
+
+//* pgbars() -- collect all the mechs in a list
+proc pgbars () { local ii
+  if (isobj(pgl,"List")) pgl.remove_all else pgl=new List()
+  for ii=0, mt[0].count()-1 pgbar(ii,pgl)
+}
+// mechlean(pgl) get rid of uninteresting mechs
+proc mechclean () { // get rid of the trivial mechs _ion, capac, morph
+  for ltrb(XO,$o1) if (strm(XO.s,"_ion")) $o1.remove(i1)
+  for ltrb(XO,$o1) if (strm(XO.s,"capaci")) $o1.remove(i1)
+  for ltrb(XO,$o1) if (strm(XO.s,"morpho")) $o1.remove(i1)
+  for ltrb(XO,$o1) if (strm(XO.s,"extracell")) $o1.remove(i1)
+}
+
+//** pgbar() called by pgbars()
+proc pgbar () { local j,ii
+  ii=$1
+  mt[0].select(ii)	
+  mt[0].selected(tstr)
+  ms = new MechanismStandard(tstr, 0)
+  j=0
+  // for j=0, ms.count()-1
+  ms.name(temp_string_, j)
+  if (numarg()==2) { // list
+    $o2.append(new String2(tstr,temp_string_))
+  } else print tstr," ",temp_string_
+}
+
+//** pgset() -- given the name of a param set the gbar
+func pgset () { local flag,ii
+  flag=0
+  for ltr(XO,pgl) if (strcmp(XO.s,$s1)==0) {ii=i1 flag=1}
+  if (flag==0) for ltr(XO,pgl) if (strm(XO.s,$s1)) {ii=i1 flag=2}
+  if (flag==0) {printf("pgset() ERR: no match for %s\n",$s1) return 0}
+  XO=pgl.object(ii)
+  if (flag==2) printf("pgset() WARNING: no exact match; using %s for %s\n",XO.s,$s1)
+  if (numarg()==2) {
+    sprint(tstr,"%s=%g",XO.t,$2)
+    if (!strm(XO.t,"[bmp]a[xrs]")) printf("pgset() WARNING: odd form: %s\n",tstr)
+  } else { sprint(tstr,"%s_%s=%g",$s2,XO.s,$3) }
+  if (ismembrane(XO.s)) execute(tstr)
+  return 1
+}
+
+//** pgrec() -- record a param; no arg -- rec all
+func pgrec () { local flag,ii,i
+  flag=0
+  if (numarg()>=2) for i=2,numarg() {
+    for ltr(YO,pgl) if (strcmp(YO.s,$si)==0) {ii=i1 flag=1}
+    if (flag==0) for ltr(YO,pgl) if (strm(YO.s,$si)) {ii=i1 flag=2}
+    if (flag==0) {printf("pgclr() ERR: no match for %s\n",$si) return 0}
+    YO=pgl.object(ii)
+    if (flag==2) printf("pgclr() WARNING: no exact match; using %s for %s\n",YO.s,$si)
+    pgrec1($s1)
+  } else for ltr(YO,pgl) pgrec1($s1)
+  return 1
+}
+
+proc pgrec1 () {
+  if (ismembrane(YO.s)) {
+    sprint(tstr,"%s_%s",$s1,YO.s)
+    if (name_declared(tstr)) {
+      sprint(tstr,"%s.%s_%s(0.5)",secname(),$s1,YO.s)
+      new_printlist_item(tstr)
+    } else {
+      printf("%s doesn't exist\n",tstr)
+    }
+  }
+}
+
+//** pgclr() -- given the name of a param set gbar=0; no arg -- clear all
+func pgclr () { local flag,ii,i
+  flag=0
+  if (numarg()>=1) for i=1,numarg() {
+    for ltr(XO,pgl) if (strcmp(XO.s,$si)==0) {ii=i1 flag=1}
+    if (flag==0) for ltr(XO,pgl) if (strm(XO.s,$si)) {ii=i1 flag=2}
+    if (flag==0) {printf("pgclr() ERR: no match for %s\n",$si) return 0}
+    XO=pgl.object(ii)
+    if (flag==2) printf("pgclr() WARNING: no exact match; using %s for %s\n",XO.s,$si)
+    sprint(tstr,"%s=%g",XO.t,0)
+    if (!(strm(XO.t,"bar")||strm(XO.t,"max"))) printf("pgclr() WARNING: odd form: %s\n",tstr)
+    if (ismembrane(XO.s)) execute(tstr)
+  } else {
+    for ltr(XO,pgl) if (ismembrane(XO.s)) {
+      sprint(tstr,"%s=%g",XO.t,0)  
+      if (ismembrane(XO.s) && (strm(XO.t,"bar")||strm(XO.t,"max"))) execute(tstr)
+    }
+  }
+  return 1
+}
+
+//** showbars() show values
+// forall { printf("\t**** %s ****\n",secname()) showbars() }
+proc showbars () {
+  for ltr(XO,pgl) if (ismembrane(XO.s)) {
+    sprint(tstr,"x=%s",XO.t) execute(tstr)
+    printf("%s: %g\n",XO.s,x)
+  }
+}
+
+//** showcurs() show currents
+// forall { printf("\t**** %s ****\n",secname()) showcurs() }
+proc showcurs () {
+  for ltr(XO,pgl) if (ismembrane(XO.s)) {
+    sprint(tstr,"i_%s",XO.s) 
+    if (name_declared(tstr)) {
+      sprint(tstr,"x=i_%s",XO.s) execute(tstr)
+      printf("%s: %g\n",XO.s,x)
+    } else {
+      printf("%s: no I\n",XO.s,x)
+    }
+  }
+}
+
+//* mcollect()
+proc mcollect () { local j,ii
+  tmplist.remove_all
+  for ii=0, mt[0].count()-1 {
+    mt[0].select(ii)	
+    mt[0].selected(tstr)
+    ms = new MechanismStandard(tstr, 0)
+    for j=0, ms.count()-1 {
+      ms.name(temp_string_, j)
+      if (strm(temp_string_,$s1)) tmplist.append(new String2(tstr,temp_string_)) else print tstr,temp_string_
+    }
+  }
+}
+
+iterator whmechs () {
+  for ii=0, mt[0].count()-1 {
+    mt[0].select(ii)	
+    mt[0].selected(tstr)
+    if (ismembrane(tstr)) {
+      iterator_statement
+    }
+  }
+}

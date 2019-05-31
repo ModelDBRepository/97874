@@ -1,0 +1,8 @@
+load_file("nrngui.hoc")
+
+xpanel("Lytton 2006 NQS")
+xlabel("There is currently no automated demonstration")
+xlabel("Please follow the directions in the readme")
+xlabel("To explore some of the features in NQS")
+xbutton("EXIT","quit()")
+xpanel()

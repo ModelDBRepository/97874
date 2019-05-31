@@ -1,0 +1,99 @@
+// $Id: hinton.hoc,v 1.33 2004/10/07 19:03:12 billl Exp $
+
+// load_file("hinton.hoc")
+load_file("colors.hoc")
+
+//* decl
+objref nilsl,ghint,cmat
+nilsl = new SectionList()
+// func mod101 () { return($1%101) }
+// cmat = new Vector()
+// cmat.resize(500*100)
+// cmat.indgen()
+// cmat.apply("mod101")
+// plot2d(ghint,-90,50)
+// draw2d(ghint,cmat,500)
+
+//* plot2d(g[,min,max,ratio]); plot2d(g[,vec,ratio]); plot2d(g,ratio)
+proc plot2d () { local ratio,width
+  $o1 = new PlotShape(nilsl,0)
+  flush_list.append($o1)
+  c1($o1,63)
+  ratio=1 width=500
+  if (numarg()>=2) {
+    if (argtype(2)==1) {
+      $o1.scale($o2.min,$o2.max)
+      if (numarg()>=3) ratio=$3
+    } else {
+      if (numarg()==2) ratio=$2
+      if (numarg()>=3) $o1.scale($2,$3)
+      if (numarg()>=4) ratio=$4
+    }
+  } else $o1.scale(0,100)
+  
+  $o1.view(0,100,0,100,100,50,width,ratio*500)
+  $o1.erase_all
+}
+
+//** draw2d(g,mat,cols) draw transpose of matrix
+xpos=yoff=0 // xpos==transpose
+scly=1
+proc he () { ghint.erase_all() }
+proc draw2d () { local i,j,k,ny,nx
+  if (numarg()>=3) nx=$3 else nx=cols
+  ny=$o2.size/nx
+  wdt=.01
+  if (!xpos) for i=0,nx-1 for j=0,ny-1  {
+    k=ny-1-j      // reverse j
+                  // ptr         xloc         yloc               xsz    ysz
+    $o1.hinton(&$o2.x[j*nx+i], (i+.5)*wdt, yoff+(k+.5)*wdt*scly, wdt, wdt*scly) }
+  if ( xpos) for i=0,nx-1 for j=0,ny-1 {
+    $o1.hinton(&$o2.x[j*nx+i], (j+.5)*wdt, yoff+(i+.5)*wdt*scly, wdt, wdt*scly) }
+  $o1.size(0, i*wdt, 0, j*wdt*scly)
+  $o1.exec_menu("Shape Plot")
+  $o1.flush
+}
+
+// hgg(color_vec, yloc_vec, xloc[, xwidth, flag]) flag means horizontal
+// like gg() but draw vec vs vec as a hinton plot
+proc hgg () { local xyloc,flag,max,ii,a,wdt,wflag
+  if (numarg()==0) {
+    print "hgg(color_vec, yloc_vec, xloc[, xwidth (vec or num), flag]) flag means horizontal"
+    return }
+  a=allocvecs(1)
+  xyloc=$3
+  flag=wflag=0
+  wdt=$o2.max/12 // to put 12 in a row next to each other and get square
+  if (numarg()>=4) if (argtype(4)==1) wflag=1 else wdt=$4
+  if (numarg()>=5) flag=$5
+  mso[a].deriv($o2,1,1) mso[a].append(mso[a].mean) mso[a].add(0.01*mso[a].mean)
+  for ii=0,$o1.size-1 {
+    if (wflag) wdt=$o4.x[ii]+1e-3 // should be non-zero width
+    if (flag){
+      ghint.hinton(&$o1.x[ii],$o2.x[ii]+mso[a].x[ii]/2, xyloc, mso[a].x[ii], wdt)
+    } else  {         // color   xloc           yloc                  xsz       ysz
+      ghint.hinton(&$o1.x[ii], xyloc, $o2.x[ii]+mso[a].x[ii]/2, wdt, mso[a].x[ii]) }
+      // print $o1.x[ii], xyloc, $o2.x[ii]+mso[a].x[ii]/2, wdt, mso[a].x[ii]
+  }
+  dealloc(a)
+}
+
+proc showghint () {
+  ghint.exec_menu("Shape Plot")
+  ghint.exec_menu("View = plot")
+  ghint.fastflush
+  doEvents()
+}
+
+//** anim2d(g,mat,cols) draws slowly
+proc anim2d () { local i,j,ny,nx
+  $o1.erase_all ny=$o2.size/nx
+  if (numarg()>=3) nx=$3 else nx=cols
+  wdt=.01
+  for i=0,nx-1 {
+    for j=0,ny-1 $o1.hinton(&$o2.x[j*nx+i],(i+.5)*wdt,(j+.5)*wdt,wdt)
+    $o1.flush
+    doEvents()
+  }
+}
+  

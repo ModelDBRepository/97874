@@ -1,0 +1,26 @@
+// $Id: setup.hoc,v 1.21 2004/11/01 22:27:47 billl Exp $
+// variables normally controlled by SIMCTRL
+
+// load_file("setup.hoc")
+load_file("stdgui.hoc")
+
+show_panel=0
+proc setup () {}
+strdef simname, filename, output_file, datestr, uname, comment, section, osname
+objref tmpfile,nil,graphItem,sfunc
+tmpfile = new File()
+simname = "sim"      // helpful if running multiple simulations simultaneously
+runnum = 2           // updated at end of run
+datestr = "99aug01"  // updated at end of day
+output_file = "data/99aug01.01"  // assumes a subdir called data
+comment = "current comment for saving sim"
+uname = "i686"  // keep track of type of machine for byte compatibility
+if (unix_mac_pc()==1) osname = "Linux" else if (unix_mac_pc()==2) { 
+  osname = "Mac" } else if (unix_mac_pc()==3) osname = "PC"
+printStep = 0.25 // time interval for saving to vector
+graph_flag=1
+batch_flag=0
+xwindows = 1     // can still save but not look without xwindows
+sfunc = hoc_sf_  // from stdlib.hoc
+
+// load_file("nrnoc.hoc")
