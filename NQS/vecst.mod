@@ -98,10 +98,20 @@ extern double* vector_vec();
 extern double hoc_epsilon;
 extern void set_seed();
 extern int ivoc_list_count(Object*);
+static int list_vector_px(Object *ob, int i, double** px);
+static int list_vector_px2 (Object *ob, int i, double** px, void** vv);
+static int list_vector_resize (Object *ob, int i, int sz);
+#ifndef NRN_VERSION_GTEQ_8_2_0
 extern Object* ivoc_list_item(Object*, int);
-static int list_vector_px();
-static int list_vector_px2();
-static int list_vector_resize();
+#else
+#ifdef __cplusplus
+extern "C" {
+#endif
+Object* ivoc_list_item(Object*, int);
+#ifdef __cplusplus
+}
+#endif
+#endif
 
 typedef struct BVEC {
  int size;
@@ -302,8 +312,9 @@ VERBATIM
 static double info(void* vv) {
   int nx,bsz; double* x;
   nx = vector_instance_px(vv, &x);
-  bsz=vector_buffer_size(vv);
+  bsz=vector_buffer_size((IvocVect*)vv);
   printf("Obj*%x Dbl*%x Size: %d Bufsize: %d\n",vv,x,nx,bsz);
+  return 0;
 }
 ENDVERBATIM
  
@@ -396,11 +407,11 @@ static double findx (void* vv) {
   nx=av[0]; // size of source vecs
   for (i=0;i<num;i++) { 
     bv[i]=list_vector_px2(ob2, i, &bvo[i], &vv); /* dest vectors */
-    if (vector_buffer_size(vv)<ni) { 
-      printf("findx ****ERRD**** arg#%d need:%d sz:%d\n",num+i+1,ni,vector_buffer_size(vv));
+    if (vector_buffer_size((IvocVect*)vv)<ni) {
+      printf("findx ****ERRD**** arg#%d need:%d sz:%d\n",num+i+1,ni,vector_buffer_size((IvocVect*)vv));
       hoc_execerror("Destination vector with insufficient size: ", 0); 
     } else {
-      vector_resize(vv, ni);
+      vector_resize((IvocVect*)vv, ni);
     }
   }
   if (ni>scrsz) { 
@@ -553,7 +564,7 @@ static double slct(void* vv) {
     }
     if (fl) ind[k++]=j; // all equal
   }
-  vector_resize(vv, k);
+  vector_resize((IvocVect*)vv, k);
   return k;
 }
 ENDVERBATIM
@@ -617,7 +628,7 @@ static double slor(void* vv) {
     }
     if (fl) ind[k++]=j; // all equal
   }
-  vector_resize(vv, k);
+  vector_resize((IvocVect*)vv, k);
   return k;
 }
 ENDVERBATIM
@@ -627,7 +638,7 @@ VERBATIM
 static double iwr(void* vv) {
   int i, j, nx;
   double *x;
-  FILE* f, *hoc_obj_file_arg();
+  FILE* f;
   f = hoc_obj_file_arg(1);
   nx = vector_instance_px(vv, &x);
   if (nx>scrsz) { 
@@ -647,7 +658,7 @@ VERBATIM
 static double ird(void* vv) {
   int i, j, nx, n;
   double *x;
-  FILE* f, *hoc_obj_file_arg();
+  FILE* f;
   f = hoc_obj_file_arg(1);
   nx = vector_instance_px(vv, &x);
   fread(&n,sizeof(int),1,f);  // size
@@ -657,9 +668,9 @@ static double ird(void* vv) {
     scr=(int *)ecalloc(scrsz, sizeof(int));
   }
   if (n!=nx) { 
-    nx=vector_buffer_size(vv);
+    nx=vector_buffer_size((IvocVect*)vv);
     if (n<=nx) {
-      vector_resize(vv, n); nx=n; 
+      vector_resize((IvocVect*)vv, n); nx=n;
     } else {
       printf("%d > %d :: ",n,nx);
       hoc_execerror("Vector max capacity too small for ird ", 0);
@@ -678,15 +689,15 @@ static double insct(void* vv) {
 	int i, j, k, nx, nv1, nv2, maxsz;
 	double *x, *v1, *v2;
 	nx = vector_instance_px(vv, &x);
-        maxsz=vector_buffer_size(vv);
-        vector_resize(vv, maxsz);
+        maxsz=vector_buffer_size((IvocVect*)vv);
+        vector_resize((IvocVect*)vv, maxsz);
 	nv1 = vector_arg_px(1, &v1);
 	nv2 = vector_arg_px(2, &v2);
         for (i=0,k=0;i<nv1;i++) for (j=0;j<nv2;j++) if (v1[i]==v2[j]) {
           if (k<maxsz) { x[k++]=v1[i]; } else {k++;}}  /* v1[i] found in both vectors */
         if (k>maxsz) { 
           printf("\tinsct WARNING: ran out of room: %d<%d\n",maxsz,k);
-        } else { vector_resize(vv, k); }
+        } else { vector_resize((IvocVect*)vv, k); }
 	return (double)k;
 }
 ENDVERBATIM
@@ -698,8 +709,8 @@ static double cull(void* vv) {
 	int i, j, k, nx, nv1, nv2, maxsz, flag;
 	double *x, *v1, *v2;
 	nx = vector_instance_px(vv, &x);
-        maxsz=vector_buffer_size(vv);
-        vector_resize(vv, maxsz);
+        maxsz=vector_buffer_size((IvocVect*)vv);
+        vector_resize((IvocVect*)vv, maxsz);
 	nv1 = vector_arg_px(1, &v1);
 	nv2 = vector_arg_px(2, &v2);
         for (i=0,k=0;i<nv1;i++) {
@@ -709,7 +720,7 @@ static double cull(void* vv) {
         }
         if (k>maxsz) { 
           printf("\tcull WARNING: ran out of room: %d<%d\n",maxsz,k);
-        } else { vector_resize(vv, k); }
+        } else { vector_resize((IvocVect*)vv, k); }
 	return (double)k;
 }
 ENDVERBATIM
@@ -722,14 +733,14 @@ static double redundout(void* vv) {
 	double *x, *v1, val;
         if (ifarg(2)) indflag=1; else indflag=0; 
 	nx = vector_instance_px(vv, &x);
-        maxsz=vector_buffer_size(vv);
-        vector_resize(vv, maxsz);
+        maxsz=vector_buffer_size((IvocVect*)vv);
+        vector_resize((IvocVect*)vv, maxsz);
 	nv1 = vector_arg_px(1, &v1);
         val=v1[0]; x[0]=(indflag?0:val);
         for (j=1,i=1;i<nv1&&j<maxsz;i++) if (v1[i]!=val) { val=v1[i]; x[j++]=(indflag?i:val); }
         if (j==maxsz) { 
           printf("\tredundout WARNING: ran out of room: %d<needed\n",maxsz);
-        } else { vector_resize(vv, j); }
+        } else { vector_resize((IvocVect*)vv, j); }
 	return (double)j;
 }
 ENDVERBATIM
@@ -751,6 +762,7 @@ static double cvlv(void* vv) {
       if (k>0 && k<nsrc-1) x[i]+=filt[j]*src[k];
     }
   }
+  return 0;
 }
 ENDVERBATIM
 
@@ -770,6 +782,7 @@ static double intrp(void* vv) {
     for (i=la+1; i<lb; i++) x[i]= a + (b-a)/(lb-la)*(i-la);
     a=b; la=lb;
   }
+  return 0;
 }
 ENDVERBATIM
 
@@ -809,7 +822,7 @@ static double nind(void* vv) {
           }
           for (k=last+1;k<nx;k++,m++) { x[m]=vvo[j][k]; }
           for (i=0;i<c;i++) vvo[j][i]=x[i];   
-          vv=vector_arg(j+2); vector_resize(vv, c);
+          vv=vector_arg(j+2); vector_resize((IvocVect*)vv, c);
         }
 	return c;
 }
@@ -844,7 +857,7 @@ static double keyind(void* vv) {
     }
     if (i==nk) ind[k++]=j; // all equal
   }
-  vector_resize(vv, k);
+  vector_resize((IvocVect*)vv, k);
   return k;
 }
 ENDVERBATIM
@@ -1000,6 +1013,7 @@ static double bpeval(void* vv) {
   } else {
     for (i=0;i<n;i++) vo[i]=outp[i]*(1.-1.*outp[i])*del[i];
   }
+  return 0;
 }
 ENDVERBATIM
  
@@ -1073,8 +1087,8 @@ static double xing(void* vv) {
   nsrc = vector_arg_px(1, &src);
   ntvec = vector_arg_px(2, &tvec);
   th = *getarg(3);
-  maxsz=vector_buffer_size(vv);
-  vector_resize(vv, maxsz);
+  maxsz=vector_buffer_size((IvocVect*)vv);
+  vector_resize((IvocVect*)vv, maxsz);
   if (nsrc!=ntvec) hoc_execerror("v.xing: vectors not all same size", 0);
   for (i=0,f=0,j=0; i<nsrc; i++) {
     if (src[i]>th) { /* ? passing thresh */
@@ -1092,7 +1106,7 @@ static double xing(void* vv) {
       if (f==1) { f=0; } /* just passed going down */
     }
   }
-  vector_resize(vv, j);
+  vector_resize((IvocVect*)vv, j);
   return (double)i;
 }
 ENDVERBATIM
@@ -1181,7 +1195,7 @@ static double lcat(void* vv) {
   Object *ob1, *ob2;
   double *x, *fr; void *vw;
   n = vector_instance_px(vv, &x);
-  vector_resize(vv,maxsz=vector_buffer_size(vv)); // open it up fully
+  vector_resize((IvocVect*)vv,maxsz=vector_buffer_size((IvocVect*)vv)); // open it up fully
   ob1 = *hoc_objgetarg(1);
   lc = ivoc_list_count(ob1);
   for (i=0,j=0;i<lc && j<maxsz;i++) {
@@ -1189,7 +1203,7 @@ static double lcat(void* vv) {
     for (k=0;k<cap && j<maxsz;k++,j++) x[j]=fr[k];
   }
   if (i<lc || k<cap) printf("vecst lcat WARN: not all vecs copied\n");
-  vector_resize(vv,j);
+  vector_resize((IvocVect*)vv,j);
   return (double)j;
 }
 ENDVERBATIM
@@ -1201,8 +1215,8 @@ static int list_vector_px(Object *ob, int i, double** px) {
   Object* obv;
   int sz;
   obv = ivoc_list_item(ob, i);
-  sz = vector_capacity(obv->u.this_pointer);
-  *px = vector_vec(obv->u.this_pointer);
+  sz = vector_capacity((IvocVect*)obv->u.this_pointer);
+  *px = vector_vec((IvocVect*)obv->u.this_pointer);
   return sz;
 }
 
@@ -1212,8 +1226,8 @@ static int list_vector_px2 (Object *ob, int i, double** px, void** vv) {
   Object* obv;
   int sz;
   obv = ivoc_list_item(ob, i);
-  sz = vector_capacity(obv->u.this_pointer);
-  *px = vector_vec(obv->u.this_pointer);
+  sz = vector_capacity((IvocVect*)obv->u.this_pointer);
+  *px = vector_vec((IvocVect*)obv->u.this_pointer);
   *vv = (void*) obv->u.this_pointer;
   return sz;
 }
@@ -1223,13 +1237,13 @@ static int list_vector_resize (Object *ob, int i, int sz) {
   Object* obv;
   int maxsz;
   obv = ivoc_list_item(ob, i);
-  maxsz = vector_buffer_size(obv->u.this_pointer);
+  maxsz = vector_buffer_size((IvocVect*)obv->u.this_pointer);
   if (sz>maxsz) {
     printf("max:%d request:%d ",maxsz,sz);
     hoc_execerror("Can't grow vector in list_vector_resize ", 0);
     return -1;
   }
-  vector_resize(obv->u.this_pointer,sz);
+  vector_resize((IvocVect*)obv->u.this_pointer,sz);
   return sz;
 }
 ENDVERBATIM
@@ -1364,9 +1378,9 @@ static double smgs (void* vv) {
 
   points = (int)((high-low)/step+hoc_epsilon);
   if (nsum!=points) { 
-    maxsz=vector_buffer_size(vv);
+    maxsz=vector_buffer_size((IvocVect*)vv);
     if (points<=maxsz) {
-      vector_resize(vv, nsum); nsum=points; 
+      vector_resize((IvocVect*)vv, nsum); nsum=points;
     } else {
       printf("%d > %d :: ",points,maxsz);
       hoc_execerror("Vector max capacity too small in smgs ", 0);
@@ -1455,7 +1469,11 @@ FUNCTION isojt () {
   Object *ob1, *ob2;
   ob1 = *hoc_objgetarg(1); ob2 = *hoc_objgetarg(2);
   if (!ob1) if (!ob2) return 1; else return 0;
+  #ifdef __cplusplus
+  if (!ob2 || ob1->ctemplate != ob2->ctemplate) {
+#else
   if (!ob2 || ob1->template != ob2->template) {
+#endif
     return 0;
   }
   return 1;
