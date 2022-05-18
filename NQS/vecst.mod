@@ -87,31 +87,25 @@ VERBATIM
 #include <math.h>
 #include <values.h> /* contains MAXLONG */
 #include <sys/time.h> 
+
+#ifndef NRN_VERSION_GTEQ_8_2_0
 extern double* hoc_pgetarg();
 extern double hoc_call_func(Symbol*, int narg);
 extern FILE* hoc_obj_file_arg(int narg);
 extern Object** hoc_objgetarg();
+extern double hoc_epsilon;
 extern void vector_resize();
 extern int vector_instance_px();
 extern void* vector_arg();
 extern double* vector_vec();
-extern double hoc_epsilon;
-extern void set_seed();
 extern int ivoc_list_count(Object*);
+extern Object* ivoc_list_item(Object*, int);
+#endif
+
+extern void set_seed();
 static int list_vector_px(Object *ob, int i, double** px);
 static int list_vector_px2 (Object *ob, int i, double** px, void** vv);
 static int list_vector_resize (Object *ob, int i, int sz);
-#ifndef NRN_VERSION_GTEQ_8_2_0
-extern Object* ivoc_list_item(Object*, int);
-#else
-#ifdef __cplusplus
-extern "C" {
-#endif
-Object* ivoc_list_item(Object*, int);
-#ifdef __cplusplus
-}
-#endif
-#endif
 
 typedef struct BVEC {
  int size;
