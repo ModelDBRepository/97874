@@ -85,7 +85,6 @@ ASSIGNED { RES }
 VERBATIM
 #include <stdlib.h>
 #include <math.h>
-#include <values.h> /* contains MAXLONG */
 #include <sys/time.h> 
 
 #ifndef NRN_VERSION_GTEQ_8_2_0

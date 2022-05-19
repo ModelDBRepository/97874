@@ -83,9 +83,9 @@ PARAMETER {
 ASSIGNED { RES }
 
 VERBATIM
+#ifndef NRN_VERSION_GTEQ_8_2_0
 #include <stdlib.h>
 #include <math.h>
-#include <values.h> /* contains MAXLONG */
 #include <sys/time.h> 
 extern double* hoc_pgetarg();
 extern double hoc_call_func(Symbol*, int narg);
@@ -99,9 +99,10 @@ extern double hoc_epsilon;
 extern void set_seed();
 extern int ivoc_list_count(Object*);
 extern Object* ivoc_list_item(Object*, int);
-static int list_vector_px();
-static int list_vector_px2();
-static int list_vector_resize();
+#endif
+static int list_vector_px(Object *ob, int i, double** px);
+static int list_vector_px2(Object *ob, int i, double** px, void** vv);
+static int list_vector_resize(Object *ob, int i, int sz);
 
 typedef struct BVEC {
  int size;
@@ -627,8 +628,7 @@ VERBATIM
 static double iwr(void* vv) {
   int i, j, nx;
   double *x;
-  FILE* f, *hoc_obj_file_arg();
-  f = hoc_obj_file_arg(1);
+  FILE* f = hoc_obj_file_arg(1);
   nx = vector_instance_px(vv, &x);
   if (nx>scrsz) { 
     if (scrsz>0) { free(scr); scr=(int *)NULL; }
@@ -647,8 +647,7 @@ VERBATIM
 static double ird(void* vv) {
   int i, j, nx, n;
   double *x;
-  FILE* f, *hoc_obj_file_arg();
-  f = hoc_obj_file_arg(1);
+  FILE* f = hoc_obj_file_arg(1);
   nx = vector_instance_px(vv, &x);
   fread(&n,sizeof(int),1,f);  // size
   if (n>scrsz) { 
@@ -1455,7 +1454,11 @@ FUNCTION isojt () {
   Object *ob1, *ob2;
   ob1 = *hoc_objgetarg(1); ob2 = *hoc_objgetarg(2);
   if (!ob1) if (!ob2) return 1; else return 0;
+#ifdef NRN_VERSION_GTEQ_8_2_0
+  if (!ob2 || ob1->ctemplate != ob2->ctemplate) {
+#else
   if (!ob2 || ob1->template != ob2->template) {
+#endif
     return 0;
   }
   return 1;
