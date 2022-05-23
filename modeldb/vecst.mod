@@ -305,6 +305,7 @@ static double info(void* vv) {
   nx = vector_instance_px(vv, &x);
   bsz=vector_buffer_size(vv);
   printf("Obj*%x Dbl*%x Size: %d Bufsize: %d\n",vv,x,nx,bsz);
+  return 0.0;
 }
 ENDVERBATIM
  
@@ -750,6 +751,7 @@ static double cvlv(void* vv) {
       if (k>0 && k<nsrc-1) x[i]+=filt[j]*src[k];
     }
   }
+  return 0.0;
 }
 ENDVERBATIM
 
@@ -769,6 +771,7 @@ static double intrp(void* vv) {
     for (i=la+1; i<lb; i++) x[i]= a + (b-a)/(lb-la)*(i-la);
     a=b; la=lb;
   }
+  return 0.0;
 }
 ENDVERBATIM
 
@@ -821,7 +824,7 @@ static double keyind(void* vv) {
   int i, j, k, ni, nk, nv[10], num;
   double *ind, *key, *vvo[10];
   ni = vector_instance_px(vv, &ind); // vv is ind
-  for (i=0;ifarg(i);i++); i--; // drop back by one to get numarg()
+  for (i=0;ifarg(i);i++) {} i--; // drop back by one to get numarg()
   if (i>10) hoc_execerror("ERR: keyind can only handle 9 vectors", 0);
   num = i-1; /* number of vectors to be picked apart */
   for (i=0;i<num;i++) { 
@@ -999,6 +1002,7 @@ static double bpeval(void* vv) {
   } else {
     for (i=0;i<n;i++) vo[i]=outp[i]*(1.-1.*outp[i])*del[i];
   }
+  return 0.0;
 }
 ENDVERBATIM
  
